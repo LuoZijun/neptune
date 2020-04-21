@@ -324,7 +324,7 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
         assert_eq!(64, leaf_count);
         let mut ctx = FutharkContext::new();
         let state = init_column_tree_builder_2k(&mut ctx).unwrap();
-
+        dbg!(&state.ptr);
         Self {
             ctx,
             state,
@@ -335,33 +335,16 @@ impl ColumnTreeBuilderTrait<Bls12, U11, U8> for ColumnTreeBuilder2k<U11, U8> {
 
     fn add_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<(), Error> {
         let mut ctx = self.ctx;
-        // take(&mut self.state, |state| {
-        //     panic!("poiu");
-        //     add_columns_2k(&mut ctx, state, columns).unwrap()
-        //     // FIXME: don't unwrap
-        // });
-
-        // FIXME
+        self.state = add_columns_2k(&mut ctx, self.state, columns)?;
         Ok(())
     }
 
     fn add_final_columns(&mut self, columns: &[GenericArray<Fr, U11>]) -> Result<Vec<Fr>, Error> {
-        let mut ctx = self.ctx;
-        let mut res = Vec::new();
-        let mut set_res = |r| res = r;
-
-        // take(&mut self.state, |state| {
-        //     let (res, new_state) = finalize_2k(&mut ctx, state).unwrap(); // FIXME: don't unwrap
-        //     set_res(res);
-        //     new_state
-        // });
-
-        // FIXME
-
-        // let (res, state) = finalize_2k(&mut self.ctx, self.state)?;
+        unimplemented!();
+        // let mut ctx = self.ctx;
+        // let (res, state) = finalize_2k(&mut ctx, self.state.to_owned())?;
         // self.state = state;
-
-        Ok(res)
+        // Ok(res)
     }
 
     fn reset(&mut self) {
@@ -689,15 +672,24 @@ mod tests {
 
     #[test]
     fn test_column_tree_builder_2k() {
-        unimplemented!(); // This currently fails with (signal: 6, SIGABRT: process abort signal)
         let leaves = 64;
+        let num_batches = 8;
+        let batch_size = leaves / num_batches;
+
         let mut ctb = ColumnTreeBuilder2k::new(64);
 
-        let columns: Vec<GenericArray<Fr, U11>> = (0..1)
-            .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
-            .collect();
+        for i in 0..(num_batches - 1) {
+            let columns: Vec<GenericArray<Fr, U11>> = (0..batch_size)
+                .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+                .collect();
 
-        ctb.add_columns(columns.as_slice());
+            ctb.add_columns(&columns);
+        }
+        // let columns: Vec<GenericArray<Fr, U11>> = (0..batch_size)
+        //     .map(|_| GenericArray::<Fr, U11>::generate(|i| Fr::zero()))
+        //     .collect();
+
+        // let rest = ctb.add_final_columns(&columns).unwrap();
     }
     use crate::column_tree_builder::ColumnTreeBuilder;
 
@@ -741,7 +733,7 @@ mod tests {
 
         // let mut cpu_builder = ColumnTreeBuilder::<Bls12, U11, U8>::new(leaves);
 
-        let mut state = init_column_tree_builder_4g(&mut ctx).unwrap();
+        let state = init_column_tree_builder_4g(&mut ctx).unwrap();
 
         // for i in 0..batch_size {
         //     let columns: Vec<GenericArray<Fr, U11>> = (0..leaves)
@@ -804,7 +796,6 @@ mod tests {
         let (res, state) = finalize_512m(&mut ctx, state).unwrap();
 
         // let cpu_res = cpu_builder.add_final_columns(columns.as_slice()).unwrap();
-
         // assert_eq!(cpu_res.len(), res.len());
         // assert_eq!(cpu_res, res);
 
