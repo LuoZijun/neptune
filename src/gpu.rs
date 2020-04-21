@@ -300,7 +300,8 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::poseidon::{poseidon, Poseidon};
+    use crate::poseidon::{poseidon, Poseidon, SimplePoseidonBatchHasher};
+    use crate::BatchHasher;
     use ff::{Field, ScalarEngine};
     use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
@@ -314,17 +315,14 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let poseidon_constants = PoseidonConstants::<Bls12, U2>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U2>::new();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash2(&mut ctx, state, preimages.as_slice()).unwrap();
-        let expected_hashes: Vec<_> = preimages
-            .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash())
-            .collect();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes.len(), hashes.len());
         assert_eq!(expected_hashes, hashes);
@@ -338,17 +336,14 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let poseidon_constants = PoseidonConstants::<Bls12, U8>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U8>::new();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash8(&mut ctx, state, preimages.as_slice()).unwrap();
-        let expected_hashes: Vec<_> = preimages
-            .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash())
-            .collect();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
     }
@@ -361,17 +356,14 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let poseidon_constants = PoseidonConstants::<Bls12, U11>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U11>::new();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash11(&mut ctx, state, preimages.as_slice()).unwrap();
-        let expected_hashes: Vec<_> = preimages
-            .iter()
-            .map(|preimage| Poseidon::new_with_preimage(&preimage, &poseidon_constants).hash())
-            .collect();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
     }

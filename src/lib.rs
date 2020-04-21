@@ -4,7 +4,7 @@ pub use crate::poseidon::Poseidon;
 use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
-use generic_array::typenum;
+use generic_array::{typenum, ArrayLength, GenericArray};
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;
 use std::ops::Add;
@@ -31,10 +31,13 @@ pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-pub trait BatchHasher<Arity>
+pub trait BatchHasher<E, Arity>
 where
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    E: ScalarEngine,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<E::Fr>,
 {
+    fn new() -> Self;
+    fn hash(&mut self, preimages: &[GenericArray<E::Fr, Arity>]) -> Vec<E::Fr>;
 }
 
 pub fn round_numbers(arity: usize) -> (usize, usize) {

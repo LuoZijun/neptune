@@ -1,7 +1,7 @@
 use crate::matrix::Matrix;
 use crate::mds::{create_mds_matrices, factor_to_sparse_matrixes, MDSMatrices, SparseMatrix};
 use crate::preprocessing::compress_round_constants;
-use crate::{matrix, quintic_s_box};
+use crate::{matrix, quintic_s_box, BatchHasher};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
@@ -601,6 +601,34 @@ where
 {
     let constants = PoseidonConstants::<E, Arity>::new();
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
+}
+
+pub struct SimplePoseidonBatchHasher<E, Arity>
+where
+    E: ScalarEngine,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+{
+    constants: PoseidonConstants<E, Arity>,
+}
+
+impl<E, Arity> BatchHasher<E, Arity> for SimplePoseidonBatchHasher<E, Arity>
+where
+    E: ScalarEngine,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<E::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<<E as ScalarEngine>::Fr>,
+{
+    fn new() -> Self {
+        Self {
+            constants: PoseidonConstants::<E, Arity>::new(),
+        }
+    }
+
+    fn hash(&mut self, preimages: &[GenericArray<E::Fr, Arity>]) -> Vec<E::Fr> {
+        preimages
+            .iter()
+            .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
+            .collect()
+    }
 }
 
 #[cfg(test)]
