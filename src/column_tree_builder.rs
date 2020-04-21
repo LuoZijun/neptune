@@ -1,5 +1,4 @@
 use crate::error::Error;
-use crate::gpu;
 use crate::poseidon::{Poseidon, PoseidonConstants};
 
 use ff::{Field, ScalarEngine};
@@ -7,9 +6,6 @@ use generic_array::{typenum, ArrayLength, GenericArray};
 use std::ops::Add;
 use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm};
-
-// pub type GPUColumnTreeBuilder<ColumnArity, TreeArity> =
-//     gpu::ColumnTreeBuilder2k<ColumnArity, TreeArity>;
 
 pub trait ColumnTreeBuilderTrait<E, ColumnArity, TreeArity>
 where
@@ -187,7 +183,7 @@ where
         // All the leaves will be the same.
         let mut element = Poseidon::new_with_preimage(&column, &self.column_constants).hash();
 
-        for i in 0..self.tree_height() {
+        for _ in 0..self.tree_height() {
             let preimage = vec![element; arity];
             // Each row is the hash of the identical elements in the previous row.
             element = Poseidon::new_with_preimage(&preimage, &self.tree_constants).hash();

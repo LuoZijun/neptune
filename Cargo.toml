@@ -17,10 +17,11 @@ ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
 paired = "0.18.0"
 rand_xorshift = "0.2.0"
-slice-of-array = "0.2.1"
+take_mut = "0.2.2"
 
 #[cfg(feature="gpu")]
-triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["sequential_c"], branch="mac-dev" }
+#triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["sequential_c"], branch="mac-dev" }
+triton = { path = "..//neptune-triton/library/triton", default-features=false, features=["sequential_c"] }
 
 
 [dev-dependencies]

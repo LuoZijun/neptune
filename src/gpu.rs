@@ -1,9 +1,8 @@
 use crate::error::Error;
-use crate::poseidon::{Poseidon, PoseidonConstants};
-use ff::{Field, PrimeField, PrimeFieldDecodingError, ScalarEngine};
-use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+use crate::poseidon::PoseidonConstants;
+use ff::{PrimeField, PrimeFieldDecodingError};
+use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
-use std::marker::PhantomData;
 use std::ops::Add;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
@@ -251,7 +250,7 @@ fn mbatch_hash2(
         .mbatch_hash2(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec();
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -270,7 +269,7 @@ fn mbatch_hash8(
         .mbatch_hash8(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec();
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -288,7 +287,7 @@ fn mbatch_hash11(
         .mbatch_hash11(state, input)
         .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
 
-    let (vec, shape) = res.to_vec();
+    let (vec, _shape) = res.to_vec();
     let frs = unpack_fr_array_from_monts(vec.as_slice())?;
 
     Ok((frs.to_vec(), state))
@@ -301,8 +300,9 @@ fn u64_vec<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> Vec<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::poseidon::poseidon;
-    use ff::Field;
+    use crate::poseidon::{poseidon, Poseidon};
+    use ff::{Field, ScalarEngine};
+    use generic_array::sequence::GenericSequence;
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
