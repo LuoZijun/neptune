@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
 use crate::BatchHasher;
-use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine};
+use ff::{PrimeField, PrimeFieldDecodingError};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
 use std::marker::PhantomData;
@@ -63,12 +63,12 @@ pub struct GPUBatchHasher<Arity> {
     _a: PhantomData<Arity>,
 }
 
-impl<Arity> BatchHasher<Arity> for GPUBatchHasher<Arity>
+impl<Arity> GPUBatchHasher<Arity>
 where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    fn new() -> Result<Self, Error> {
+    pub(crate) fn new() -> Result<Self, Error> {
         let mut ctx = FutharkContext::new();
         Ok(Self {
             ctx,
@@ -76,7 +76,13 @@ where
             _a: PhantomData::<Arity>,
         })
     }
+}
 
+impl<Arity> BatchHasher<Arity> for GPUBatchHasher<Arity>
+where
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+{
     fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Vec<Fr> {
         let (res, state) = self.state.hash(&mut self.ctx, preimages).unwrap(); //FIXME
         std::mem::replace(&mut self.state, state);
@@ -398,6 +404,7 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
+        let mut gpu_hasher = GPUBatchHasher::<U2>::new().unwrap();
         let mut simple_hasher = SimplePoseidonBatchHasher::<U2>::new().unwrap();
 
         let preimages = (0..batch_size)
@@ -405,10 +412,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash2(&mut ctx, &mut state, preimages.as_slice()).unwrap();
+        let gpu_hashes = gpu_hasher.hash(&preimages);
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
-        assert_eq!(expected_hashes.len(), hashes.len());
         assert_eq!(expected_hashes, hashes);
+        assert_eq!(expected_hashes, gpu_hashes);
     }
 
     #[test]
@@ -419,6 +427,7 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
+        let mut gpu_hasher = GPUBatchHasher::<U8>::new().unwrap();
         let mut simple_hasher = SimplePoseidonBatchHasher::<U8>::new().unwrap();
 
         let preimages = (0..batch_size)
@@ -426,9 +435,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash8(&mut ctx, &mut state, preimages.as_slice()).unwrap();
+        let gpu_hashes = gpu_hasher.hash(&preimages);
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
+        assert_eq!(expected_hashes, gpu_hashes);
     }
 
     #[test]
@@ -439,6 +450,7 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
+        let mut gpu_hasher = GPUBatchHasher::<U11>::new().unwrap();
         let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new().unwrap();
 
         let preimages = (0..batch_size)
@@ -446,8 +458,10 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash11(&mut ctx, &mut state, preimages.as_slice()).unwrap();
+        let gpu_hashes = gpu_hasher.hash(&preimages);
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
+        assert_eq!(expected_hashes, gpu_hashes);
     }
 }
