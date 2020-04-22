@@ -5,6 +5,7 @@ use crate::round_constants::generate_constants;
 pub use error::Error;
 use ff::{Field, PrimeField, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
+use paired::bls12_381;
 pub use paired::bls12_381::Fr as Scalar;
 use paired::bls12_381::FrRepr;
 use std::ops::Add;
@@ -31,13 +32,16 @@ pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,
 ];
 
-pub trait BatchHasher<E, Arity>
+pub trait BatchHasher<Arity>
 where
-    E: ScalarEngine,
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<E::Fr>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
+    Self: std::marker::Sized,
 {
-    fn new() -> Self;
-    fn hash(&mut self, preimages: &[GenericArray<E::Fr, Arity>]) -> Vec<E::Fr>;
+    // type State;
+
+    fn new() -> Result<Self, Error>;
+    fn hash(&mut self, preimages: &[GenericArray<bls12_381::Fr, Arity>]) -> Vec<bls12_381::Fr>;
 }
 
 pub fn round_numbers(arity: usize) -> (usize, usize) {

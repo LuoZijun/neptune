@@ -5,6 +5,8 @@ use crate::{matrix, quintic_s_box, BatchHasher};
 use crate::{round_constants, round_numbers, scalar_from_u64, Error};
 use ff::{Field, ScalarEngine};
 use generic_array::{sequence::GenericSequence, typenum, ArrayLength, GenericArray};
+use paired::bls12_381;
+use paired::bls12_381::Bls12;
 use std::marker::PhantomData;
 use std::ops::Add;
 use typenum::bit::B1;
@@ -603,27 +605,28 @@ where
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
 }
 
-pub struct SimplePoseidonBatchHasher<E, Arity>
+pub struct SimplePoseidonBatchHasher<'a, Arity>
 where
-    E: ScalarEngine,
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>,
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
 {
-    constants: PoseidonConstants<E, Arity>,
+    constants: PoseidonConstants<Bls12, Arity>,
+    _s: PhantomData<Poseidon<'a, Bls12, Arity>>,
 }
 
-impl<E, Arity> BatchHasher<E, Arity> for SimplePoseidonBatchHasher<E, Arity>
+impl<'a, Arity> BatchHasher<Arity> for SimplePoseidonBatchHasher<'a, Arity>
 where
-    E: ScalarEngine,
-    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<E::Fr>,
-    <Arity as Add<B1>>::Output: ArrayLength<<E as ScalarEngine>::Fr>,
+    Arity: 'a + Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
 {
-    fn new() -> Self {
-        Self {
-            constants: PoseidonConstants::<E, Arity>::new(),
-        }
+    fn new() -> Result<Self, Error> {
+        Ok(Self {
+            constants: PoseidonConstants::<Bls12, Arity>::new(),
+            _s: PhantomData::<Poseidon<'a, Bls12, Arity>>,
+        })
     }
 
-    fn hash(&mut self, preimages: &[GenericArray<E::Fr, Arity>]) -> Vec<E::Fr> {
+    fn hash(&mut self, preimages: &[GenericArray<bls12_381::Fr, Arity>]) -> Vec<bls12_381::Fr> {
         preimages
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())

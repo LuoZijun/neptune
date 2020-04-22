@@ -1,8 +1,10 @@
 use crate::error::Error;
 use crate::poseidon::PoseidonConstants;
-use ff::{PrimeField, PrimeFieldDecodingError};
+use crate::BatchHasher;
+use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine};
 use generic_array::{typenum, ArrayLength, GenericArray};
 use paired::bls12_381::{Bls12, Fr, FrRepr};
+use std::marker::PhantomData;
 use std::ops::Add;
 use triton::FutharkContext;
 use triton::{Array_u64_1d, Array_u64_2d, Array_u64_3d};
@@ -12,6 +14,75 @@ use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
 type P2State = triton::FutharkOpaqueP2State;
 type P8State = triton::FutharkOpaqueP8State;
 type P11State = triton::FutharkOpaqueP11State;
+
+enum BatcherState {
+    Arity2(P2State),
+    Arity8(P8State),
+    Arity11(P11State),
+}
+
+impl BatcherState {
+    fn new<Arity: Unsigned>(ctx: &mut FutharkContext) -> Result<Self, Error> {
+        Ok(match Arity::to_usize() {
+            size if size == 2 => BatcherState::Arity2(init_hash2(ctx)?),
+            size if size == 8 => BatcherState::Arity8(init_hash8(ctx)?),
+            size if size == 11 => BatcherState::Arity11(init_hash11(ctx)?),
+            _ => panic!("unsupported arity: {}", Arity::to_usize()),
+        })
+    }
+
+    fn hash<Arity: ArrayLength<Fr>>(
+        &mut self,
+        ctx: &mut FutharkContext,
+        preimages: &[GenericArray<Fr, Arity>],
+    ) -> Result<(Vec<Fr>, Self), Error>
+    where
+        Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
+        <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+    {
+        match self {
+            BatcherState::Arity2(state) => {
+                let (res, state) = mbatch_hash2(ctx, state, preimages)?;
+                Ok((res, BatcherState::Arity2(state)))
+            }
+            BatcherState::Arity8(state) => {
+                let (res, state) = mbatch_hash8(ctx, state, preimages)?;
+                Ok((res, BatcherState::Arity8(state)))
+            }
+            BatcherState::Arity11(state) => {
+                let (res, state) = mbatch_hash11(ctx, state, preimages)?;
+                Ok((res, BatcherState::Arity11(state)))
+            }
+        }
+    }
+}
+
+pub struct GPUBatchHasher<Arity> {
+    ctx: FutharkContext,
+    state: BatcherState,
+    _a: PhantomData<Arity>,
+}
+
+impl<Arity> BatchHasher<Arity> for GPUBatchHasher<Arity>
+where
+    Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
+    <Arity as Add<B1>>::Output: ArrayLength<Fr>,
+{
+    fn new() -> Result<Self, Error> {
+        let mut ctx = FutharkContext::new();
+        Ok(Self {
+            ctx,
+            state: BatcherState::new::<Arity>(&mut ctx)?,
+            _a: PhantomData::<Arity>,
+        })
+    }
+
+    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Vec<Fr> {
+        let (res, state) = self.state.hash(&mut self.ctx, preimages).unwrap(); //FIXME
+        std::mem::replace(&mut self.state, state);
+        res
+    }
+}
 
 struct GPUConstants<Arity>(PoseidonConstants<Bls12, Arity>)
 where
@@ -237,11 +308,15 @@ fn init_hash11(ctx: &mut FutharkContext) -> Result<P11State, Error> {
     Ok(state)
 }
 
-fn mbatch_hash2(
+fn mbatch_hash2<Arity>(
     ctx: &mut FutharkContext,
-    state: P2State,
-    preimages: &[GenericArray<Fr, U2>],
-) -> Result<(Vec<Fr>, P2State), Error> {
+    state: &mut P2State,
+    preimages: &[GenericArray<Fr, Arity>],
+) -> Result<(Vec<Fr>, P2State), Error>
+where
+    Arity: Unsigned + ArrayLength<Fr>,
+{
+    assert_eq!(2, Arity::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -256,11 +331,15 @@ fn mbatch_hash2(
     Ok((frs.to_vec(), state))
 }
 
-fn mbatch_hash8(
+fn mbatch_hash8<Arity>(
     ctx: &mut FutharkContext,
-    state: P8State,
-    preimages: &[GenericArray<Fr, U8>],
-) -> Result<(Vec<Fr>, P8State), Error> {
+    state: &P8State,
+    preimages: &[GenericArray<Fr, Arity>],
+) -> Result<(Vec<Fr>, P8State), Error>
+where
+    Arity: Unsigned + ArrayLength<Fr>,
+{
+    assert_eq!(8, Arity::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -274,11 +353,15 @@ fn mbatch_hash8(
 
     Ok((frs.to_vec(), state))
 }
-fn mbatch_hash11(
+fn mbatch_hash11<Arity>(
     ctx: &mut FutharkContext,
-    state: P11State,
-    preimages: &[GenericArray<Fr, U11>],
-) -> Result<(Vec<Fr>, P11State), Error> {
+    state: &P11State,
+    preimages: &[GenericArray<Fr, Arity>],
+) -> Result<(Vec<Fr>, P11State), Error>
+where
+    Arity: Unsigned + ArrayLength<Fr>,
+{
+    assert_eq!(11, Arity::to_usize());
     let flat_preimages = as_mont_u64s(preimages);
     let input = Array_u64_1d::from_vec(*ctx, &flat_preimages, &[flat_preimages.len() as i64, 1])
         .map_err(|_| Error::Other("could not convert".to_string()))?;
@@ -311,17 +394,17 @@ mod tests {
     fn test_mbatch_hash2() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
-        let state = init_hash2(&mut ctx).unwrap();
+        let mut state = init_hash2(&mut ctx).unwrap();
         let batch_size = 100;
         let arity = 2;
 
-        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U2>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U2>::new().unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
-        let (hashes, state) = mbatch_hash2(&mut ctx, state, preimages.as_slice()).unwrap();
+        let (hashes, state) = mbatch_hash2(&mut ctx, &mut state, preimages.as_slice()).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes.len(), hashes.len());
@@ -332,17 +415,17 @@ mod tests {
     fn test_mbatch_hash8() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
-        let state = init_hash8(&mut ctx).unwrap();
+        let mut state = init_hash8(&mut ctx).unwrap();
         let batch_size = 100;
         let arity = 2;
 
-        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U8>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U8>::new().unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
-        let (hashes, state) = mbatch_hash8(&mut ctx, state, preimages.as_slice()).unwrap();
+        let (hashes, state) = mbatch_hash8(&mut ctx, &mut state, preimages.as_slice()).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
@@ -352,17 +435,17 @@ mod tests {
     fn test_mbatch_hash11() {
         let mut rng = XorShiftRng::from_seed(crate::TEST_SEED);
         let mut ctx = FutharkContext::new();
-        let state = init_hash11(&mut ctx).unwrap();
+        let mut state = init_hash11(&mut ctx).unwrap();
         let batch_size = 100;
         let arity = 2;
 
-        let mut simple_hasher = SimplePoseidonBatchHasher::<Bls12, U11>::new();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new().unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))
             .collect::<Vec<_>>();
 
-        let (hashes, state) = mbatch_hash11(&mut ctx, state, preimages.as_slice()).unwrap();
+        let (hashes, state) = mbatch_hash11(&mut ctx, &mut state, preimages.as_slice()).unwrap();
         let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
 
         assert_eq!(expected_hashes, hashes);
