@@ -266,9 +266,12 @@ mod tests {
         test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32);
 
         // 128KiB tree has 4096 leaves.
-        test_column_tree_builder_aux(None, 512, 32);
+        test_column_tree_builder_aux(None, 512, 19);
         test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32);
         test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32);
+
+        // 512MiB
+        // test_column_tree_builder_aux(Some(BatcherType::CPU), 16777216, 32);
     }
 
     fn test_column_tree_builder_aux(
@@ -276,8 +279,6 @@ mod tests {
         leaves: usize,
         num_batches: usize,
     ) -> Fr {
-        // FIXME: Handle final batch if num_batches doesn't divide leaves evenly.
-        assert_eq!(0, leaves % num_batches);
         let batch_size = leaves / num_batches;
 
         let mut builder = ColumnTreeBuilder::<U11, U8>::new(batcher_type, leaves).unwrap();
@@ -287,16 +288,15 @@ mod tests {
         let constant_column = GenericArray::<Fr, U11>::generate(|i| constant_element);
 
         let mut total_columns = 0;
-        for i in 1..num_batches {
+        while total_columns + batch_size < leaves {
             let columns: Vec<GenericArray<Fr, U11>> =
                 (0..batch_size).map(|_| constant_column).collect();
 
-            dbg!(&i, &columns.len());
             let res = builder.add_columns(columns.as_slice()).unwrap();
             total_columns += columns.len();
         }
 
-        let final_columns: Vec<_> = (0..batch_size)
+        let final_columns: Vec<_> = (0..leaves - total_columns)
             .map(|_| GenericArray::<Fr, U11>::generate(|i| constant_element))
             .collect();
 
