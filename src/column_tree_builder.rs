@@ -90,7 +90,7 @@ where
         self.data.iter_mut().for_each(|place| *place = Fr::zero());
     }
 }
-fn as_columns<'a, Arity: ArrayLength<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, Arity>] {
+fn as_generic_arrays<'a, Arity: ArrayLength<Fr>>(vec: &'a [Fr]) -> &'a [GenericArray<Fr, Arity>] {
     assert_eq!(0, vec.len() % Arity::to_usize());
 
     unsafe {
@@ -146,6 +146,8 @@ where
 
         match &mut self.tree_batcher {
             Some(batcher) => {
+                let max_batch_size = batcher.max_batch_size();
+
                 let (mut row_start, mut row_end) = (0, self.leaf_count);
                 while row_end < tree_size {
                     let row_size = row_end - row_start;
@@ -154,12 +156,22 @@ where
 
                     let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
 
-                    let columns = as_columns::<TreeArity>(&tree_data[row_start..row_end]);
-                    let hashed = batcher.hash(&columns);
+                    let mut total_hashed = 0;
+                    let mut batch_start = row_start;
+                    while total_hashed < new_row_size {
+                        let batch_end = usize::min(batch_start + (max_batch_size * arity), row_end);
+                        let batch_size = (batch_end - batch_start) / arity;
+                        let preimages =
+                            as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
+                        let hashed = batcher.hash(&preimages);
+                        dbg!(&preimages.len());
 
-                    // Poor-man's copy_from_slice avoids a mutable second borrow of tree_data.
-                    for i in 0..hashed.len() {
-                        tree_data[new_row_start + i] = hashed[i]
+                        // Poor-man's copy_from_slice avoids a mutable second borrow of tree_data.
+                        for i in 0..hashed.len() {
+                            tree_data[new_row_start + total_hashed + i] = hashed[i]
+                        }
+                        total_hashed += batch_size;
+                        batch_start = batch_end;
                     }
 
                     row_start = new_row_start;
@@ -272,6 +284,14 @@ mod tests {
 
         // 512MiB
         // test_column_tree_builder_aux(Some(BatcherType::CPU), 16777216, 32);
+        // test_column_tree_builder_aux(Some(BatcherType::CPU), 134217728, 100);
+    }
+
+    #[test]
+    #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
+    fn test_column_tree_builder_slow() {
+        // 512MiB
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 16777216, 32);
     }
 
     fn test_column_tree_builder_aux(
@@ -287,10 +307,20 @@ mod tests {
         let constant_element = Fr::zero();
         let constant_column = GenericArray::<Fr, U11>::generate(|i| constant_element);
 
+        // let max_batch_size = if let Some(batcher) = builder.column_batcher {
+        //     batcher.max_batch_size()
+        // } else {
+        //     batch_size
+        // };
+
+        let max_batch_size = 762600; // FIXME -- get this properly from the batcher.
+
+        let effective_batch_size = usize::min(batch_size, max_batch_size);
+
         let mut total_columns = 0;
-        while total_columns + batch_size < leaves {
+        while total_columns + effective_batch_size < leaves {
             let columns: Vec<GenericArray<Fr, U11>> =
-                (0..batch_size).map(|_| constant_column).collect();
+                (0..effective_batch_size).map(|_| constant_column).collect();
 
             let res = builder.add_columns(columns.as_slice()).unwrap();
             total_columns += columns.len();

@@ -54,6 +54,14 @@ where
 
         Ok(target_slice.copy_from_slice(self.hash(preimages).as_slice()))
     }
+
+    /// `max_batch_size` is advisory. Implenters of `BatchHasher` should ensure that up to the returned max hashes can
+    /// be safely performed on the target GPU (currently 2080Ti). The max returned should represent a safe batch size
+    /// optimized for performance.
+    /// `BatchHasher` users are responsible for not attempting to hash batches larger than the advised maximum.
+    fn max_batch_size(&self) -> usize {
+        762600 // This seems to be safe for 11-ary hashes on a 2080Ti.
+    }
 }
 
 pub fn round_numbers(arity: usize) -> (usize, usize) {
