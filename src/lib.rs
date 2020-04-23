@@ -42,7 +42,7 @@ where
 {
     // type State;
 
-    fn hash(&mut self, preimages: &[GenericArray<Scalar, Arity>]) -> Vec<Scalar>;
+    fn hash(&mut self, preimages: &[GenericArray<Scalar, Arity>]) -> Result<Vec<Scalar>, Error>;
 
     fn hash_into_slice(
         &mut self,
@@ -52,7 +52,15 @@ where
         assert_eq!(target_slice.len(), preimages.len());
         // FIXME: Account for max batch size.
 
-        Ok(target_slice.copy_from_slice(self.hash(preimages).as_slice()))
+        Ok(target_slice.copy_from_slice(self.hash(preimages)?.as_slice()))
+    }
+
+    fn tree_leaf_count(&self) -> Option<usize> {
+        None
+    }
+
+    fn build_tree(&mut self, leaves: &[Scalar]) -> Result<Vec<Scalar>, Error> {
+        unimplemented!();
     }
 
     /// `max_batch_size` is advisory. Implenters of `BatchHasher` should ensure that up to the returned max hashes can
@@ -60,7 +68,7 @@ where
     /// optimized for performance.
     /// `BatchHasher` users are responsible for not attempting to hash batches larger than the advised maximum.
     fn max_batch_size(&self) -> usize {
-        762600 // This seems to be safe for 11-ary hashes on a 2080Ti.
+        700000
     }
 }
 

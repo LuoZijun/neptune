@@ -14,6 +14,7 @@ use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
 type P2State = triton::FutharkOpaqueP2State;
 type P8State = triton::FutharkOpaqueP8State;
 type P11State = triton::FutharkOpaqueP11State;
+pub(crate) type T864MState = triton::FutharkOpaqueT864MState;
 
 enum BatcherState {
     Arity2(P2State),
@@ -60,6 +61,7 @@ impl BatcherState {
 pub struct GPUBatchHasher<Arity> {
     ctx: FutharkContext,
     state: BatcherState,
+    tree_builder_state: Option<T864MState>, // TODO: This is a hack, be more general.
     _a: PhantomData<Arity>,
 }
 
@@ -73,6 +75,12 @@ where
         Ok(Self {
             ctx,
             state: BatcherState::new::<Arity>(&mut ctx)?,
+            // TODO: matching on Arity = 8 is a hack. Be more general.
+            tree_builder_state: if Arity::to_usize() == 8 {
+                Some(init_tree8_64m(&mut ctx)?)
+            } else {
+                None
+            },
             _a: PhantomData::<Arity>,
         })
     }
@@ -83,13 +91,33 @@ where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Vec<Fr> {
-        let (res, state) = self.state.hash(&mut self.ctx, preimages).unwrap(); //FIXME
+    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Result<Vec<Fr>, Error> {
+        let (res, state) = self.state.hash(&mut self.ctx, preimages)?; //FIXME
         std::mem::replace(&mut self.state, state);
-        res
+        Ok(res)
+    }
+
+    fn tree_leaf_count(&self) -> Option<usize> {
+        match self.tree_builder_state {
+            Some(_) =>
+            //Some(1 << 6), // Leaves for 64MiB tree. TODO: be more general.
+            {
+                Some(1 << 21)
+            } // Leaves for 64MiB tree. TODO: be more general.
+            None => None,
+        }
+    }
+
+    fn build_tree(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
+        if let Some(state) = &self.tree_builder_state {
+            build_tree8_64m(&mut self.ctx, state, leaves)
+        } else {
+            panic!("Tried to build tree without tree_builder_state.");
+        }
     }
 }
 
+#[derive(Debug)]
 struct GPUConstants<Arity>(PoseidonConstants<Bls12, Arity>)
 where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>>;
@@ -253,6 +281,19 @@ fn as_mont_u64s<'a, U: ArrayLength<Fr>>(vec: &'a [GenericArray<Fr, U>]) -> &'a [
     }
 }
 
+fn frs_as_mont_u64s<'a>(vec: &'a [Fr]) -> &'a [u64] {
+    let fr_size = 4; // Number of limbs in Fr.
+    assert_eq!(
+        fr_size * std::mem::size_of::<u64>(),
+        std::mem::size_of::<Fr>(),
+        "fr size changed"
+    );
+
+    unsafe {
+        std::slice::from_raw_parts(vec.as_ptr() as *const () as *const u64, vec.len() * fr_size)
+    }
+}
+
 fn as_u64s<U: ArrayLength<Fr>>(vec: &[GenericArray<Fr, U>]) -> Vec<u64> {
     if vec.len() == 0 {
         return Vec::new();
@@ -314,6 +355,40 @@ fn init_hash11(ctx: &mut FutharkContext) -> Result<P11State, Error> {
     Ok(state)
 }
 
+pub(crate) fn init_tree8_64m(ctx: &mut FutharkContext) -> Result<T864MState, Error> {
+    let constants = GPUConstants(PoseidonConstants::<Bls12, U8>::new());
+    let state = ctx
+        .init_t8_64m(
+            constants.arity_tag(&ctx)?,
+            constants.round_keys(&ctx)?,
+            constants.mds_matrix(&ctx)?,
+            constants.pre_sparse_matrix(&ctx)?,
+            constants.sparse_matrixes(&ctx)?,
+        )
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    Ok(state)
+}
+
+pub(crate) fn build_tree8_64m(
+    ctx: &mut FutharkContext,
+    state: &T864MState,
+    leaves: &[Fr],
+) -> Result<Vec<Fr>, Error> {
+    let u64_leaves = frs_as_mont_u64s(leaves);
+    let input = Array_u64_1d::from_vec(*ctx, &u64_leaves, &[u64_leaves.len() as i64, 1])
+        .map_err(|_| Error::Other("could not convert".to_string()))?;
+
+    let res = ctx
+        .build_tree8_64m(state, input)
+        .map_err(|e| Error::GPUError(format!("{:?}", e)))?;
+
+    let (vec, _shape) = res.to_vec();
+    let frs = unpack_fr_array_from_monts(vec.as_slice())?;
+
+    Ok(frs.to_vec())
+}
+
 fn mbatch_hash2<Arity>(
     ctx: &mut FutharkContext,
     state: &mut P2State,
@@ -359,6 +434,7 @@ where
 
     Ok((frs.to_vec(), state))
 }
+
 fn mbatch_hash11<Arity>(
     ctx: &mut FutharkContext,
     state: &P11State,
@@ -412,8 +488,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash2(&mut ctx, &mut state, preimages.as_slice()).unwrap();
-        let gpu_hashes = gpu_hasher.hash(&preimages);
-        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
+        let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
         assert_eq!(expected_hashes, hashes);
         assert_eq!(expected_hashes, gpu_hashes);
@@ -435,8 +511,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash8(&mut ctx, &mut state, preimages.as_slice()).unwrap();
-        let gpu_hashes = gpu_hasher.hash(&preimages);
-        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
+        let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
         assert_eq!(expected_hashes, hashes);
         assert_eq!(expected_hashes, gpu_hashes);
@@ -458,8 +534,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         let (hashes, state) = mbatch_hash11(&mut ctx, &mut state, preimages.as_slice()).unwrap();
-        let gpu_hashes = gpu_hasher.hash(&preimages);
-        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages);
+        let gpu_hashes = gpu_hasher.hash(&preimages).unwrap();
+        let expected_hashes: Vec<_> = simple_hasher.hash(&preimages).unwrap();
 
         assert_eq!(expected_hashes, hashes);
         assert_eq!(expected_hashes, gpu_hashes);

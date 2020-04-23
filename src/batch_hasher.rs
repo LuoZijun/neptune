@@ -9,7 +9,7 @@ use typenum::bit::B1;
 use typenum::uint::{UInt, UTerm, Unsigned};
 //use typenum::{UInt, UTerm, Unsigned, U11, U2, U8};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum BatcherType {
     GPU,
     CPU,
@@ -49,10 +49,24 @@ where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Vec<Fr> {
+    fn hash(&mut self, preimages: &[GenericArray<Fr, Arity>]) -> Result<Vec<Fr>, Error> {
         match self {
             Batcher::GPU(batcher) => batcher.hash(preimages),
             Batcher::CPU(batcher) => batcher.hash(preimages),
+        }
+    }
+
+    fn tree_leaf_count(&self) -> Option<usize> {
+        match self {
+            Batcher::GPU(batcher) => batcher.tree_leaf_count(),
+            Batcher::CPU(batcher) => batcher.tree_leaf_count(),
+        }
+    }
+
+    fn build_tree(&mut self, leaves: &[Fr]) -> Result<Vec<Fr>, Error> {
+        match self {
+            Batcher::GPU(batcher) => batcher.build_tree(leaves),
+            Batcher::CPU(batcher) => batcher.build_tree(leaves),
         }
     }
 }

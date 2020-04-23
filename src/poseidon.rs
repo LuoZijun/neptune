@@ -605,6 +605,7 @@ where
     Poseidon::<E, Arity>::new_with_preimage(preimage, &constants).hash()
 }
 
+#[derive(Debug)]
 pub struct SimplePoseidonBatchHasher<'a, Arity>
 where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
@@ -631,11 +632,14 @@ where
     Arity: 'a + Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
 {
-    fn hash(&mut self, preimages: &[GenericArray<bls12_381::Fr, Arity>]) -> Vec<bls12_381::Fr> {
-        preimages
+    fn hash(
+        &mut self,
+        preimages: &[GenericArray<bls12_381::Fr, Arity>],
+    ) -> Result<Vec<bls12_381::Fr>, Error> {
+        Ok(preimages
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
-            .collect()
+            .collect())
     }
 }
 

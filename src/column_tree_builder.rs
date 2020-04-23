@@ -116,12 +116,12 @@ where
             column_constants: PoseidonConstants::<Bls12, ColumnArity>::new(),
             tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
             column_batcher: if let Some(t) = &t {
-                Some(Batcher::new(t)?)
+                Some(Batcher::<ColumnArity>::new(t)?)
             } else {
                 None
             },
             tree_batcher: if let Some(t) = &t {
-                Some(Batcher::new(t)?)
+                Some(Batcher::<TreeArity>::new(t)?)
             } else {
                 None
             },
@@ -153,8 +153,16 @@ where
                     let row_size = row_end - row_start;
                     assert_eq!(0, row_size % arity);
                     let new_row_size = row_size / arity;
-
                     let (new_row_start, new_row_end) = (row_end, row_end + new_row_size);
+
+                    if let Some(leaf_count) = batcher.tree_leaf_count() {
+                        if row_size == leaf_count {
+                            let remaining_tree =
+                                batcher.build_tree(&tree_data[row_start..row_end])?;
+                            tree_data[new_row_start..tree_size].copy_from_slice(&remaining_tree);
+                            return Ok(tree_data);
+                        };
+                    }
 
                     let mut total_hashed = 0;
                     let mut batch_start = row_start;
@@ -163,8 +171,7 @@ where
                         let batch_size = (batch_end - batch_start) / arity;
                         let preimages =
                             as_generic_arrays::<TreeArity>(&tree_data[batch_start..batch_end]);
-                        let hashed = batcher.hash(&preimages);
-                        dbg!(&preimages.len());
+                        let hashed = batcher.hash(&preimages)?;
 
                         // Poor-man's copy_from_slice avoids a mutable second borrow of tree_data.
                         for i in 0..hashed.len() {
@@ -233,7 +240,6 @@ where
             }
             current_row_size /= arity;
         }
-        dbg!(&tree_height);
         tree_height
     }
 
@@ -289,9 +295,16 @@ mod tests {
 
     #[test]
     #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
-    fn test_column_tree_builder_slow() {
+    fn test_column_tree_builder_512m() {
         // 512MiB
         test_column_tree_builder_aux(Some(BatcherType::GPU), 16777216, 32);
+    }
+
+    #[test]
+    #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
+    fn test_column_tree_builder_4g() {
+        //4GiB
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 134217728, 100);
     }
 
     fn test_column_tree_builder_aux(
@@ -307,13 +320,7 @@ mod tests {
         let constant_element = Fr::zero();
         let constant_column = GenericArray::<Fr, U11>::generate(|i| constant_element);
 
-        // let max_batch_size = if let Some(batcher) = builder.column_batcher {
-        //     batcher.max_batch_size()
-        // } else {
-        //     batch_size
-        // };
-
-        let max_batch_size = 762600; // FIXME -- get this properly from the batcher.
+        let max_batch_size = 400000; // FIXME -- get this properly from the batcher.
 
         let effective_batch_size = usize::min(batch_size, max_batch_size);
 
@@ -332,7 +339,7 @@ mod tests {
 
         let res = builder.add_final_columns(final_columns.as_slice()).unwrap();
         total_columns += final_columns.len();
-        dbg!(&total_columns, &leaves, &num_batches, &batch_size);
+
         let computed_root = res[res.len() - 1];
 
         let expected_root = builder.compute_uniform_tree_root(final_columns[0]).unwrap();
