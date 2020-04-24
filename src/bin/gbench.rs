@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 //use rand::SeedableRng;
 //use rand_xorshift::XorShiftRng;
 
-fn test_column_tree_builder_aux(
+fn bench_column_building(
     batcher_type: Option<BatcherType>,
     leaves: usize,
     max_column_batch_size: usize,
@@ -39,7 +39,7 @@ fn test_column_tree_builder_aux(
         leaves
     };
 
-    let effective_batch_size = 5; //usize::min(leaves, max_batch_size);
+    let effective_batch_size = usize::min(leaves, max_batch_size);
     info!(
         "Using effective batch size {} to build columns",
         effective_batch_size
@@ -106,7 +106,12 @@ fn main() -> Result<(), Error> {
     info!("max column batch size: {}", max_column_batch_size);
     info!("max tree batch size: {}", max_column_batch_size);
 
-    test_column_tree_builder_aux(None, leaves, max_column_batch_size, max_tree_batch_size);
+    bench_column_building(
+        Some(BatcherType::GPU),
+        leaves,
+        max_column_batch_size,
+        max_tree_batch_size,
+    );
     info!("end");
     Ok(())
 }
