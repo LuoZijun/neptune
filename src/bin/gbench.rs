@@ -95,11 +95,11 @@ fn bench_column_building(
 fn main() -> Result<(), Error> {
     env_logger::init();
 
-    let kib = 2; //1024 * 64; //
+    let kib = 1024 * 1024 * 4;
     let bytes = kib * 1024;
     let leaves = bytes / 32;
-    let max_column_batch_size = leaves;
-    let max_tree_batch_size = leaves;
+    let max_column_batch_size = 400000;
+    let max_tree_batch_size = 700000;
 
     info!("KiB: {}", kib);
     info!("leaves: {}", leaves);
