@@ -13,15 +13,17 @@ bellperson = "0.6.3"
 bincode = { version = "1.2", optional = true }
 blake2s_simd = "0.5"
 byteorder = "1"
+env_logger = "0.7.1"
 ff = { version = "0.2.1", package = "fff" }
 generic-array = "0.13.2"
+log = "0.4.8"
 paired = "0.18.0"
 rand_xorshift = "0.2.0"
 take_mut = "0.2.2"
 
 #[cfg(feature="gpu")]
 #triton = { git = "https://github.com/filecoin-project/neptune-triton", default-features=false, features=["sequential_c"], branch="mac-dev" }
-triton = { path = "..//neptune-triton/library/triton", default-features=false, features=["sequential_c"] }
+triton = { path = "..//neptune-triton/library/triton", default-features=false, features=["opencl"] }
 
 
 [dev-dependencies]
