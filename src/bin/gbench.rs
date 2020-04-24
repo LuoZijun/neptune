@@ -104,7 +104,7 @@ fn main() -> Result<(), Error> {
     info!("KiB: {}", kib);
     info!("leaves: {}", leaves);
     info!("max column batch size: {}", max_column_batch_size);
-    info!("max tree batch size: {}", max_column_batch_size);
+    info!("max tree batch size: {}", max_tree_batch_size);
 
     bench_column_building(
         Some(BatcherType::GPU),
