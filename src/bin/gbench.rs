@@ -9,9 +9,7 @@ use neptune::error::Error;
 use neptune::BatchHasher;
 use paired::bls12_381::Fr;
 use std::result::Result;
-use std::time::{Duration, Instant};
-//use rand::SeedableRng;
-//use rand_xorshift::XorShiftRng;
+use std::time::Instant;
 
 fn bench_column_building(
     batcher_type: Option<BatcherType>,
@@ -67,8 +65,6 @@ fn bench_column_building(
     let res = builder.add_final_columns(final_columns.as_slice()).unwrap();
     info!("end commitment");
     let elapsed = start.elapsed();
-    let secs = elapsed.as_secs();
-    let millis = elapsed.as_millis();
     info!("commitment time: {:?}", elapsed);
 
     total_columns += final_columns.len();
