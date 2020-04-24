@@ -13,7 +13,7 @@ use typenum::{UInt, UTerm, Unsigned};
 
 /// Poseidon circuit
 pub mod circuit;
-mod error;
+pub mod error;
 mod matrix;
 mod mds;
 
@@ -28,7 +28,7 @@ pub mod column_tree_builder;
 mod gpu;
 
 /// Batch Hasher
-mod batch_hasher;
+pub mod batch_hasher;
 
 pub(crate) const TEST_SEED: [u8; 16] = [
     0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06, 0xbc, 0xe5,

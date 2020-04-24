@@ -31,14 +31,14 @@ where
     TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
     <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    leaf_count: usize,
+    pub leaf_count: usize,
     data: Vec<Fr>,
     /// Index of the first unfilled datum.
     fill_index: usize,
     column_constants: PoseidonConstants<Bls12, ColumnArity>,
     tree_constants: PoseidonConstants<Bls12, TreeArity>,
-    column_batcher: Option<Batcher<'a, ColumnArity>>,
-    tree_batcher: Option<Batcher<'a, TreeArity>>,
+    pub column_batcher: Option<Batcher<'a, ColumnArity>>,
+    pub tree_batcher: Option<Batcher<'a, TreeArity>>,
 }
 
 impl<ColumnArity, TreeArity> ColumnTreeBuilderTrait<ColumnArity, TreeArity>
@@ -108,7 +108,7 @@ where
     TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
     <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    fn new(
+    pub fn new(
         t: Option<BatcherType>,
         leaf_count: usize,
         max_column_batch_size: usize,
@@ -139,7 +139,7 @@ where
         Ok(builder)
     }
 
-    fn build_tree(&mut self) -> Result<Vec<Fr>, Error> {
+    pub fn build_tree(&mut self) -> Result<Vec<Fr>, Error> {
         let tree_size = self.tree_size();
         let arity = TreeArity::to_usize();
 
@@ -204,7 +204,7 @@ where
         Ok(tree_data)
     }
 
-    fn tree_size(&self) -> usize {
+    pub fn tree_size(&self) -> usize {
         let arity = TreeArity::to_usize();
 
         let mut tree_size = 0;
@@ -227,7 +227,7 @@ where
         tree_size
     }
 
-    fn tree_height(&self) -> usize {
+    pub fn tree_height(&self) -> usize {
         let arity = TreeArity::to_usize();
 
         let mut tree_height = 0;
@@ -250,7 +250,7 @@ where
 
     // Compute root of tree composed of all identical columns. For use in checking correctness of GPU column tree-building
     // without the cost of generating a full column tree.
-    pub(crate) fn compute_uniform_tree_root(
+    pub fn compute_uniform_tree_root(
         &mut self,
         column: GenericArray<Fr, ColumnArity>,
     ) -> Result<Fr, Error> {

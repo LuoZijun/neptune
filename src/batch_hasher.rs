@@ -15,7 +15,7 @@ pub enum BatcherType {
     CPU,
 }
 
-pub(crate) enum Batcher<'a, Arity>
+pub enum Batcher<'a, Arity>
 where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<Fr>,
