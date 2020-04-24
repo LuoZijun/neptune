@@ -59,7 +59,7 @@ where
         None
     }
 
-    fn build_tree(&mut self, leaves: &[Scalar]) -> Result<Vec<Scalar>, Error> {
+    fn build_tree(&mut self, _leaves: &[Scalar]) -> Result<Vec<Scalar>, Error> {
         unimplemented!();
     }
 

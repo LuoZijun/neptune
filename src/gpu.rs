@@ -62,6 +62,7 @@ pub struct GPUBatchHasher<Arity> {
     ctx: FutharkContext,
     state: BatcherState,
     tree_builder_state: Option<T864MState>, // TODO: This is a hack, be more general.
+    max_batch_size: usize,
     _a: PhantomData<Arity>,
 }
 
@@ -70,17 +71,21 @@ where
     Arity: Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    pub(crate) fn new() -> Result<Self, Error> {
+    pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
         let mut ctx = FutharkContext::new();
         Ok(Self {
             ctx,
             state: BatcherState::new::<Arity>(&mut ctx)?,
-            // TODO: matching on Arity = 8 is a hack. Be more general.
             tree_builder_state: if Arity::to_usize() == 8 {
-                Some(init_tree8_64m(&mut ctx)?)
+                None
+            // Uncomment the following to build 64M trees.
+            // However, in practice this doesn't add noticeable speed and does use more memory.
+            // Leave the mechanism in as basis for further future experimentation, for now.
+            // Some(init_tree8_64m(&mut ctx)?)
             } else {
                 None
             },
+            max_batch_size,
             _a: PhantomData::<Arity>,
         })
     }
@@ -99,11 +104,7 @@ where
 
     fn tree_leaf_count(&self) -> Option<usize> {
         match self.tree_builder_state {
-            Some(_) =>
-            //Some(1 << 6), // Leaves for 64MiB tree. TODO: be more general.
-            {
-                Some(1 << 21)
-            } // Leaves for 64MiB tree. TODO: be more general.
+            Some(_) => Some(1 << 21), // Leaves for 64MiB tree. TODO: be more general.
             None => None,
         }
     }
@@ -114,6 +115,10 @@ where
         } else {
             panic!("Tried to build tree without tree_builder_state.");
         }
+    }
+
+    fn max_batch_size(&self) -> usize {
+        self.max_batch_size
     }
 }
 
@@ -480,8 +485,8 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let mut gpu_hasher = GPUBatchHasher::<U2>::new().unwrap();
-        let mut simple_hasher = SimplePoseidonBatchHasher::<U2>::new().unwrap();
+        let mut gpu_hasher = GPUBatchHasher::<U2>::new(batch_size).unwrap();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U2>::new(batch_size).unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U2>::generate(|_| Fr::random(&mut rng)))
@@ -503,8 +508,8 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let mut gpu_hasher = GPUBatchHasher::<U8>::new().unwrap();
-        let mut simple_hasher = SimplePoseidonBatchHasher::<U8>::new().unwrap();
+        let mut gpu_hasher = GPUBatchHasher::<U8>::new(batch_size).unwrap();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U8>::new(batch_size).unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U8>::generate(|_| Fr::random(&mut rng)))
@@ -526,8 +531,8 @@ mod tests {
         let batch_size = 100;
         let arity = 2;
 
-        let mut gpu_hasher = GPUBatchHasher::<U11>::new().unwrap();
-        let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new().unwrap();
+        let mut gpu_hasher = GPUBatchHasher::<U11>::new(batch_size).unwrap();
+        let mut simple_hasher = SimplePoseidonBatchHasher::<U11>::new(batch_size).unwrap();
 
         let preimages = (0..batch_size)
             .map(|_| GenericArray::<Fr, U11>::generate(|_| Fr::random(&mut rng)))

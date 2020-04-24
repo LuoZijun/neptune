@@ -36,10 +36,12 @@ where
         }
     }
 
-    pub(crate) fn new(t: &BatcherType) -> Result<Self, Error> {
+    pub(crate) fn new(t: &BatcherType, max_batch_size: usize) -> Result<Self, Error> {
         match t {
-            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<Arity>::new()?)),
-            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new()?)),
+            BatcherType::GPU => Ok(Batcher::GPU(GPUBatchHasher::<Arity>::new(max_batch_size)?)),
+            BatcherType::CPU => Ok(Batcher::CPU(SimplePoseidonBatchHasher::<Arity>::new(
+                max_batch_size,
+            )?)),
         }
     }
 }
@@ -67,6 +69,13 @@ where
         match self {
             Batcher::GPU(batcher) => batcher.build_tree(leaves),
             Batcher::CPU(batcher) => batcher.build_tree(leaves),
+        }
+    }
+
+    fn max_batch_size(&self) -> usize {
+        match self {
+            Batcher::GPU(batcher) => batcher.max_batch_size(),
+            Batcher::CPU(batcher) => batcher.max_batch_size(),
         }
     }
 }

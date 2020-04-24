@@ -612,6 +612,7 @@ where
     <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
 {
     constants: PoseidonConstants<Bls12, Arity>,
+    max_batch_size: usize,
     _s: PhantomData<Poseidon<'a, Bls12, Arity>>,
 }
 
@@ -620,9 +621,10 @@ where
     Arity: 'a + Unsigned + Add<B1> + Add<UInt<UTerm, B1>> + ArrayLength<bls12_381::Fr>,
     <Arity as Add<B1>>::Output: ArrayLength<bls12_381::Fr>,
 {
-    pub(crate) fn new() -> Result<Self, Error> {
+    pub(crate) fn new(max_batch_size: usize) -> Result<Self, Error> {
         Ok(Self {
             constants: PoseidonConstants::<Bls12, Arity>::new(),
+            max_batch_size,
             _s: PhantomData::<Poseidon<'a, Bls12, Arity>>,
         })
     }
@@ -640,6 +642,10 @@ where
             .iter()
             .map(|preimage| Poseidon::new_with_preimage(&preimage, &self.constants).hash())
             .collect())
+    }
+
+    fn max_batch_size(&self) -> usize {
+        self.max_batch_size
     }
 }
 

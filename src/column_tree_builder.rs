@@ -108,7 +108,12 @@ where
     TreeArity: ArrayLength<Fr> + Add<B1> + Add<UInt<UTerm, B1>>,
     <TreeArity as Add<B1>>::Output: ArrayLength<Fr>,
 {
-    fn new(t: Option<BatcherType>, leaf_count: usize) -> Result<Self, Error> {
+    fn new(
+        t: Option<BatcherType>,
+        leaf_count: usize,
+        max_column_batch_size: usize,
+        max_tree_batch_size: usize,
+    ) -> Result<Self, Error> {
         let builder = Self {
             leaf_count,
             data: vec![Fr::zero(); leaf_count],
@@ -116,12 +121,12 @@ where
             column_constants: PoseidonConstants::<Bls12, ColumnArity>::new(),
             tree_constants: PoseidonConstants::<Bls12, TreeArity>::new(),
             column_batcher: if let Some(t) = &t {
-                Some(Batcher::<ColumnArity>::new(t)?)
+                Some(Batcher::<ColumnArity>::new(t, max_column_batch_size)?)
             } else {
                 None
             },
             tree_batcher: if let Some(t) = &t {
-                Some(Batcher::<TreeArity>::new(t)?)
+                Some(Batcher::<TreeArity>::new(t, max_tree_batch_size)?)
             } else {
                 None
             },
@@ -279,14 +284,14 @@ mod tests {
     #[test]
     fn test_column_tree_builder() {
         // 16KiB tree has 512 leaves.
-        test_column_tree_builder_aux(None, 512, 32);
-        test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32);
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32);
+        test_column_tree_builder_aux(None, 512, 32, 512, 512);
+        test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
 
         // 128KiB tree has 4096 leaves.
-        test_column_tree_builder_aux(None, 512, 19);
-        test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32);
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32);
+        test_column_tree_builder_aux(None, 512, 19, 512, 512);
+        test_column_tree_builder_aux(Some(BatcherType::CPU), 512, 32, 512, 512);
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 512, 32, 512, 512);
 
         // 512MiB
         // test_column_tree_builder_aux(Some(BatcherType::CPU), 16777216, 32);
@@ -297,30 +302,42 @@ mod tests {
     #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
     fn test_column_tree_builder_512m() {
         // 512MiB
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 16777216, 32);
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 16777216, 32, 400000, 700000);
     }
 
     #[test]
     #[ignore] // FIXME: add a feature flag. Very expensive test without actual GPU.
     fn test_column_tree_builder_4g() {
         //4GiB
-        test_column_tree_builder_aux(Some(BatcherType::GPU), 134217728, 100);
+        test_column_tree_builder_aux(Some(BatcherType::GPU), 134217728, 100, 400000, 700000);
     }
 
     fn test_column_tree_builder_aux(
         batcher_type: Option<BatcherType>,
         leaves: usize,
         num_batches: usize,
+        max_column_batch_size: usize,
+        max_tree_batch_size: usize,
     ) -> Fr {
         let batch_size = leaves / num_batches;
 
-        let mut builder = ColumnTreeBuilder::<U11, U8>::new(batcher_type, leaves).unwrap();
+        let mut builder = ColumnTreeBuilder::<U11, U8>::new(
+            batcher_type,
+            leaves,
+            max_column_batch_size,
+            max_tree_batch_size,
+        )
+        .unwrap();
 
         // Simplify computing the expected root.
         let constant_element = Fr::zero();
         let constant_column = GenericArray::<Fr, U11>::generate(|i| constant_element);
 
-        let max_batch_size = 400000; // FIXME -- get this properly from the batcher.
+        let max_batch_size = if let Some(batcher) = &builder.column_batcher {
+            batcher.max_batch_size()
+        } else {
+            leaves
+        };
 
         let effective_batch_size = usize::min(batch_size, max_batch_size);
 
